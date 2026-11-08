@@ -1,0 +1,84 @@
+import fs from "fs/promises";
+import path from "path";
+import { VideoProject } from "@/lib/types";
+
+export const projectStorePath = path.join(process.cwd(), ".data", "projects.json");
+
+async function ensureStore() {
+  const dir = path.dirname(projectStorePath);
+  await fs.mkdir(dir, { recursive: true });
+
+  try {
+    await fs.access(projectStorePath);
+  } catch {
+    await fs.writeFile(projectStorePath, JSON.stringify([], null, 2), "utf8");
+  }
+}
+
+export async function listProjects(): Promise<VideoProject[]> {
+  await ensureStore();
+  const raw = await fs.readFile(projectStorePath, "utf8");
+  return JSON.parse(raw || "[]") as VideoProject[];
+}
+
+export async function getProjectById(id: string): Promise<VideoProject | null> {
+  const projects = await listProjects();
+  return projects.find((project) => project.id === id) || null;
+}
+
+export async function createProject(input: Partial<VideoProject>): Promise<VideoProject> {
+  await ensureStore();
+  const projects = await listProjects();
+  const now = new Date().toISOString();
+  const project: VideoProject = {
+    id: input.id || crypto.randomUUID(),
+    name: input.name || "פרויקט חדש",
+    prompt: input.prompt || "",
+    duration: Number(input.duration || 5) as VideoProject["duration"],
+    style: input.style || "cinematic",
+    language: input.language || "he",
+    narrationLanguage: input.narrationLanguage || "he",
+    voice: input.voice || "female-professional",
+    soundtrack: input.soundtrack || "cinematic-orchestral",
+    closedCaptions: Boolean(input.closedCaptions),
+    onScreenTitles: Boolean(input.onScreenTitles),
+    pacing: input.pacing || "balanced",
+    quality: input.quality || "1080p",
+    aspectRatio: input.aspectRatio || "16:9",
+    status: input.status || "draft",
+    createdAt: input.createdAt || now,
+    updatedAt: input.updatedAt || now,
+    scenes: input.scenes || [],
+    outputUrl: input.outputUrl,
+    subtitleUrl: input.subtitleUrl,
+    narrationUrl: input.narrationUrl,
+  };
+
+  projects.unshift(project);
+  await fs.writeFile(projectStorePath, JSON.stringify(projects, null, 2), "utf8");
+  return project;
+}
+
+export async function updateProjectById(id: string, update: Partial<VideoProject>): Promise<VideoProject> {
+  const projects = await listProjects();
+  const index = projects.findIndex((project) => project.id === id);
+  if (index === -1) {
+    throw new Error("Project not found");
+  }
+
+  const updated = {
+    ...projects[index],
+    ...update,
+    updatedAt: new Date().toISOString(),
+  } satisfies VideoProject;
+
+  projects[index] = updated;
+  await fs.writeFile(projectStorePath, JSON.stringify(projects, null, 2), "utf8");
+  return updated;
+}
+
+export async function deleteProjectById(id: string) {
+  const projects = await listProjects();
+  const next = projects.filter((project) => project.id !== id);
+  await fs.writeFile(projectStorePath, JSON.stringify(next, null, 2), "utf8");
+}
